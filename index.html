@@ -1,0 +1,652 @@
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每日星座运势</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 严格限定色卡配色：浅灰/米白/深粉/黑色 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        // 严格按B端色卡定义（仅保留这4种核心色）
+                        primary: '#E91E63',  // 主色：深粉色/玫红色（色卡核心）
+                        bgLight: '#F0F0F0',  // 浅灰色（背景）
+                        bgOffWhite: '#FAFAFA',// 米白色（卡片/辅助）
+                        textMain: '#000000',  // 黑色（主要文字）
+                        textLight: '#757575', // 浅灰（次要文字，从浅灰衍生）
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-in-out',
+                        'slide-up': 'slideUp 0.5s ease-in-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .horoscope-card {
+                @apply bg-bgOffWhite rounded-xl shadow-md p-6 transition-all duration-300 hover:shadow-lg border border-bgLight;
+            }
+            .zodiac-btn {
+                @apply flex flex-col items-center justify-center p-3 rounded-lg transition-all duration-300 hover:scale-105 focus:outline-none;
+            }
+            .zodiac-btn.active {
+                @apply ring-2 ring-primary ring-offset-2 scale-105 bg-bgLight;
+            }
+            .fortune-meter {
+                @apply h-3 rounded-full overflow-hidden bg-bgLight;
+            }
+            .fortune-meter-fill {
+                @apply h-full transition-all duration-1000 ease-out bg-primary;
+            }
+            .color-swatch {
+                @apply w-12 h-12 rounded-full shadow-md transition-transform duration-300 hover:scale-110 cursor-pointer border-2 border-bgLight;
+            }
+            /* 日历组件样式 */
+            .calendar-btn {
+                @apply px-4 py-2 bg-bgOffWhite border border-bgLight rounded-lg text-textMain hover:bg-bgLight transition-all duration-300 flex items-center gap-2;
+            }
+            .calendar-modal {
+                @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50 opacity-0 pointer-events-none transition-opacity duration-300;
+            }
+            .calendar-modal.active {
+                @apply opacity-100 pointer-events-auto;
+            }
+            .calendar-content {
+                @apply bg-bgOffWhite rounded-xl p-6 shadow-lg max-w-md w-full transform scale-95 transition-transform duration-300;
+            }
+            .calendar-modal.active .calendar-content {
+                @apply scale-100;
+            }
+            .date-input {
+                @apply w-full px-4 py-2 border border-bgLight rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent;
+            }
+            /* 强制设置所有星座icon为#E91E63 */
+            .zodiac-btn span:first-child,
+            #zodiac-icon {
+                color: #E91E63 !important;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-bgLight font-sans text-textMain">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- 页面标题 -->
+        <header class="text-center mb-8 animate-fade-in">
+            <h1 class="text-4xl font-bold text-textMain mb-2">每日推活运势</h1>
+            <p class="text-textLight">地下偶像每日推活运势 </p>
+            
+            <div class="mt-4 flex justify-center">
+                <button id="calendar-toggle" class="calendar-btn">
+                    <span id="selected-date-text">选择查询日期（当前：今日）</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- 星座选择区域 -->
+        <section class="mb-8 animate-fade-in" style="animation-delay: 0.2s;">
+            <h2 class="text-xl font-semibold mb-4 text-center text-textMain">选择你的星座</h2>
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3" id="zodiac-buttons">
+                <!-- 星座按钮将通过JS动态生成 -->
+            </div>
+        </section>
+
+        <!-- 运势展示区域 -->
+        <section id="fortune-section" class="mb-8 opacity-0 transition-opacity duration-500">
+            <div class="horoscope-card animate-slide-up">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center">
+                        <div id="zodiac-icon" class="text-4xl mr-3">♈</div>
+                        <div>
+                            <h2 id="zodiac-name" class="text-2xl font-bold text-textMain">白羊座</h2>
+                            <p id="zodiac-date" class="text-sm text-textLight">3月21日 - 4月19日</p>
+                        </div>
+                    </div>
+                    <div id="fortune-rating" class="text-2xl font-bold text-primary">热血</div>
+                </div>
+
+                <div class="mb-6">
+                    <div class="flex justify-between mb-1">
+                        <span class="text-sm font-medium text-textMain" id="query-date-display">推活运势（今日）</span>
+                        <span id="fortune-score" class="text-sm font-medium text-textMain"></span>
+                    </div>
+                    <div class="fortune-meter">
+                        <div id="fortune-meter-fill" class="fortune-meter-fill"></div>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold mb-2 text-textMain">应援运势</h3>
+                    <p id="fortune-description" class="text-textMain">今天你的应援热情拉满，打call节奏超稳，在live现场能带动全场气氛。去现场可能会被推し点名互动，还能抽到限量生写，是冲前排应援的绝佳时机。</p>
+                </div>
+
+                <!-- 应援详情和推活建议区域 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2 text-textMain">应援详情</h3>
+                        <ul id="fortune-details" class="space-y-2">
+                        </ul>
+                    </div>
+                    <div class="flex flex-col justify-between">
+                        <h3 class="text-lg font-semibold mb-2 text-textMain">推活建议</h3>
+                        <p id="fortune-advice" class="text-textMain" style="text-align: left; flex-grow: 1;">今天适合站在前排硬核应援，提前练习推し的call本节奏。注意控制喊call音量，避免嗓子疲劳，随身带润喉糖和运动饮料补充体力。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 幸运颜色区域 → 莫兰迪 2色 -->
+        <section id="colors-section" class="opacity-0 transition-opacity duration-500">
+            <div class="horoscope-card animate-slide-up" style="animation-delay: 0.2s;">
+                <h2 class="text-xl font-bold mb-4 text-textMain">应援幸运色</h2>
+                <div id="color-swatches" class="flex flex-wrap gap-4 mb-6">
+                </div>
+                <div id="color-description" class="text-textMain">
+                </div>
+            </div>
+        </section>
+
+        <!-- 日历选择弹窗 -->
+        <div id="calendar-modal" class="calendar-modal">
+            <div class="calendar-content">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-textMain">选择查询日期</h3>
+                    <button id="close-calendar" class="text-textLight hover:text-primary">✕</button>
+                </div>
+                <div class="mb-6">
+                    <label for="date-picker" class="block text-sm font-medium text-textMain mb-2">选择日期</label>
+                    <input type="date" id="date-picker" class="date-input">
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button id="reset-date" class="px-4 py-2 border border-bgLight rounded-lg text-textMain hover:bg-bgLight transition-all duration-300">
+                        查看今日
+                    </button>
+                    <button id="confirm-date" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-all duration-300">
+                        确认查询
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <footer class="text-center text-textLight text-sm mt-12">
+            <p>© 推活运势 | 希望你天天开心 — riri</p>
+        </footer>
+    </div>
+
+    <script>
+        // 完整星座数据
+        const zodiacData = [
+            {
+                id: 'aries',
+                name: '白羊座',
+                icon: '♈',
+                date: '3月21日 - 4月19日',
+                fortune: {
+                    rating: '热血',
+                    baseScore: 75,
+                    goodDescriptions: [
+                        '今天你的应援热情拉满，打call节奏超稳，在live现场能带动全场气氛。去现场可能会被推し点名互动，还能抽到限量生写，是冲前排应援的绝佳时机。',
+                        '你的应援能量十足，今天在live现场会特别有活力。推し可能会注意到你的热情，有机会获得互动机会。抽选运气也不错，试试手气吧！',
+                        '今天是展现你硬核应援实力的好日子，call声响亮有力，节奏精准。推し会感受到你的支持，现场气氛因你而更加热烈。'
+                    ],
+                    normalDescriptions: [
+                        '今天的应援状态还不错，call点基本能跟上，和同担的配合也比较默契。推し可能会注意到你的存在，但互动机会一般。',
+                        '应援热情适中的一天，虽然不是特别突出，但也能享受推活的乐趣。抽选运气平平，建议理性消费。',
+                        '今天适合稳扎稳打的应援方式，不需要太激进但也不能太消极。保持良好的心态，享受和推し见面的时光。'
+                    ],
+                    badDescriptions: [
+                        '今天应援状态低迷，打call节奏容易跟不上，推し可能不会注意到你。建议调整心态，不要给自己太大压力。',
+                        '运气比较差的一天，抽选容易落空，周边收集也不顺利。建议今天以休息为主，养精蓄锐等待更好的时机。',
+                        '今天推し的状态似乎也不太好，互动回应较少。保持耐心，相信明天会是更好的一天。'
+                    ],
+                    details: [
+                        { 
+                            category: '推し互动', 
+                            baseScore: 75,
+                            variations: [
+                                '推し对你的印象',
+                                '和推し的互动机会',
+                                '推し关注你的几率',
+                                '与推し的眼神交流',
+                                '推し注意度'
+                            ]
+                        },
+                        { 
+                            category: '抽赏运气', 
+                            baseScore: 85,
+                            variations: [
+                                '推し周边抽选运',
+                                '推し谷子收集运',
+                                '推し特典会抽选',
+                                '推し限定周边运气',
+                                '推し相关抽赏运'
+                            ]
+                        },
+                        { 
+                            category: '推し回应', 
+                            baseScore: 80,
+                            variations: [
+                                '推し对你的回应',
+                                '推し互动积极性',
+                                '推し的关注程度',
+                                '推し对你的印象分',
+                                '推し回应热情度'
+                            ]
+                        }
+                    ],
+                    advices: [
+                        '今天适合站在前排硬核应援，提前练习推し的call本节奏。注意控制喊call音量，避免嗓子疲劳，随身带润喉糖和运动饮料补充体力。',
+                        '建议提前到场占好位置，准备充足的应援道具。今天的体力消耗会比较大，记得补充水分和能量。',
+                        '可以尝试一些创新的应援方式，但要注意不要影响其他粉丝。保持热情的同时也要注意礼貌和秩序。',
+                        '今天是展示你应援实力的好机会，不妨挑战一些高难度的call法。和同担保持良好沟通，共同创造最佳应援效果。',
+                        '建议穿着舒适的鞋子和服装，今天可能需要长时间站立和活动。带好相机，今天可能会捕捉到很多精彩瞬间。'
+                    ]
+                },
+                colors: [
+                    { hex: '#C9A7B4', name: '豆沙色', description: '温柔又有力量，提升现场应援气场，让推し轻松注意到你。' },
+                    { hex: '#A9B4C2', name: '灰蓝色', description: '稳定情绪，提升抽赏与互动运气，应援更顺利。' },
+                    { hex: '#D4B9B9', name: '粉灰色', description: '增加亲和力，让同担更容易接近你，交流推活心得。' }
+                ]
+            },
+            {
+                id: 'taurus',
+                name: '金牛座',
+                icon: '♉',
+                date: '4月20日 - 5月20日',
+                fortune: {
+                    rating: '欧气',
+                    baseScore: 70,
+                    goodDescriptions: [
+                        '今天你的拍立得收集运超棒，去拍立得店能捡到推し的隐藏款谷子，特典会抽选容易中前排。预算规划清晰，能以最划算的方式入手想要的拍立得。',
+                        '你的收集运势很好，今天容易遇到推し的稀有周边。特典会抽选运气不错，可能会中到好位置。记得带上足够的预算哦！',
+                        '今天是收集推し周边的好日子，无论是线上还是线下都有不错的收获。抽选时手气颇佳，可以尝试一些平时不敢抽的限定款。'
+                    ],
+                    normalDescriptions: [
+                        '今天的收集运气一般，普通周边还是能买到的，但稀有款可能需要一些运气。建议先买必入款，再考虑抽选。',
+                        '抽选运气平平，可能需要多抽几次才能中到想要的周边。和同担交换谷子的成功率还不错。',
+                        '今天适合理性消费，重点关注性价比高的周边。虽然不会有特别的欧气，但也不会踩雷。'
+                    ],
+                    badDescriptions: [
+                        '今天的收集运比较差，抽选容易落空，稀有周边也很难遇到。建议今天暂时收手，避免冲动消费。',
+                        '运气不佳的一天，无论是抽选还是购买都不太顺利。同担交换也很难换到想要的谷子。',
+                        '今天推し周边可能会遇到高价炒卖的情况，建议保持冷静，等待更好的入手时机。'
+                    ],
+                    details: [
+                        { 
+                            category: '推し互动', 
+                            baseScore: 70,
+                            variations: [
+                                '推し对你的印象',
+                                '和推し的互动机会',
+                                '推し关注你的几率',
+                                '与推し的眼神交流',
+                                '推し注意度'
+                            ]
+                        },
+                        { 
+                            category: '抽赏运气', 
+                            baseScore: 90,
+                            variations: [
+                                '推し周边抽选运',
+                                '推し谷子收集运',
+                                '推し特典会抽选',
+                                '推し限定周边运气',
+                                '推し相关抽赏运'
+                            ]
+                        },
+                        { 
+                            category: '推し回应', 
+                            baseScore: 65,
+                            variations: [
+                                '推し对你的回应',
+                                '推し互动积极性',
+                                '推し的关注程度',
+                                '推し对你的印象分',
+                                '推し回应热情度'
+                            ]
+                        }
+                    ],
+                    advices: [
+                        '今天适合去现场拍立得店扫货，重点关注推し的个人拍立得和限定set。可以和同担交换重复的谷子，你的审美和眼光会得到同好认可。',
+                        '建议提前做好预算规划，列出优先级清单，避免冲动消费。今天的收集运很好，但也要理性选择最值得的周边。',
+                        '可以尝试参加一些抽选活动，今天的手气不错。记得关注官方社交媒体，及时获取推し周边的最新信息。',
+                        '今天适合和同担交流收集心得，分享收藏经验。也许能从资深粉丝那里学到一些收集技巧和渠道。',
+                        '建议准备充足的收纳空间，今天可能会收获不少谷子。整理收藏时可以顺便拍照记录，分享给其他同担。'
+                    ]
+                },
+                colors: [
+                    { hex: '#B8A9C9', name: '淡紫色', description: '提升收集与捡漏运，更容易遇到稀有谷子。' },
+                    { hex: '#A2B9B2', name: '灰绿色', description: '理性消费，守住预算，买到最值得的推し周边。' },
+                    { hex: '#D4C9B9', name: '奶茶色', description: '增加同担好感，更容易交换到想要的谷子。' }
+                ]
+            },
+            {
+                id: 'gemini',
+                name: '双子座',
+                icon: '♊',
+                date: '5月21日 - 6月21日',
+                fortune: {
+                    rating: '社交',
+                    baseScore: 80,
+                    goodDescriptions: [
+                        '今天你的社交运爆棚，能认识很多同担，交流推活心得超开心。在live现场能快速融入应援团，和大家一起打call超有氛围。',
+                        '你的沟通能力超强，今天能和不同的应援团体打成一片。推し也会注意到你活泼的性格，互动机会大大增加。',
+                        '今天是拓展推活社交圈的好日子，主动和身边的同担搭话，会收获很多有用的信息和友谊。'
+                    ],
+                    normalDescriptions: [
+                        '今天的社交状态还不错，能和熟悉的同担愉快交流，但不太容易认识新朋友。应援时配合度尚可，氛围不错。',
+                        '和同担的交流比较平淡，没有特别的火花，但也不会有矛盾。推し互动机会一般，平常心就好。',
+                        '今天适合和固定的应援小伙伴一起行动，不需要刻意拓展社交圈，享受熟悉的氛围。'
+                    ],
+                    badDescriptions: [
+                        '今天社交运不佳，容易和同担产生小误会，建议少说话多应援。推し互动也比较少，专注自己的应援就好。',
+                        '沟通不太顺畅的一天，可能会误解同担的意思，或者表达不清楚自己的想法。建议今天保持低调。',
+                        '今天应援团氛围一般，容易出现小摩擦。建议专注于推し，不要参与不必要的争论。'
+                    ],
+                    details: [
+                        { 
+                            category: '同担社交', 
+                            baseScore: 85,
+                            variations: [
+                                '认识新同担的机会',
+                                '和同担的默契度',
+                                '信息获取效率',
+                                '应援团融入度',
+                                '社交愉悦度'
+                            ]
+                        },
+                        { 
+                            category: '推し互动', 
+                            baseScore: 75,
+                            variations: [
+                                '推し对你的关注',
+                                '互动自然度',
+                                '沟通顺畅度',
+                                '推し回应积极性',
+                                '互动记忆点'
+                            ]
+                        },
+                        { 
+                            category: '信息获取', 
+                            baseScore: 80,
+                            variations: [
+                                '推し行程信息',
+                                '周边发售信息',
+                                '应援技巧学习',
+                                '内部消息获取',
+                                '信息准确性'
+                            ]
+                        }
+                    ],
+                    advices: [
+                        '今天适合主动和身边的同担交流，分享应援技巧和推し的趣事。带上小礼物（如贴纸、小卡）分享，能快速拉近距离。',
+                        '建议多参与应援团的集体活动，比如合call、集体应援物制作等，你的创意会得到大家的认可。',
+                        '今天信息获取运很好，多关注社交平台和同担群，能得到推し的最新行程和周边信息。',
+                        '可以尝试组织小型同担聚会，比如看完live后一起吃饭聊天，加深彼此的友谊。',
+                        '注意不要过度闲聊影响应援，保持热情但也要专注于支持推し的核心目标。'
+                    ]
+                },
+                colors: [
+                    { hex: '#C2A9B9', name: '藕粉色', description: '提升沟通亲和力，更容易和同担建立友好关系。' },
+                    { hex: '#B9C2A9', name: '嫩绿色', description: '激活思维，快速获取有用的推し相关信息。' },
+                    { hex: '#A9C2C0', name: '清蓝色', description: '保持沟通理性，避免和同担产生不必要的误会。' }
+                ]
+            },
+            // 补充剩余9个星座基础结构（可根据需要完善内容）
+            { id: 'cancer', name: '巨蟹座', icon: '♋', date: '6月22日 - 7月22日', fortune: { rating: '暖心', baseScore: 72, goodDescriptions: [''], normalDescriptions: [''], badDescriptions: [''], details: [], advices: [] }, colors: [{ hex: '#D4B9C9', name: '柔粉色', description: '' }, { hex: '#B9D4C9', name: '浅青色', description: '' }] },
+            { id: 'leo', name: '狮子座', icon: '♌', date: '7月23日 - 8月22日', fortune: { rating: '闪耀', baseScore: 85, goodDescriptions: [''], normalDescriptions: [''], badDescriptions: [''], details: [], advices: [] }, colors: [{ hex: '#C9D4B9', name: '暖黄色', description: '' }, { hex: '#C9B9B9', name: '暖橘色', description: '' }] },
+            { id: 'virgo', name: '处女座', icon: '♍', date: '8月23日 - 9月22日', fortune: { rating: '细致', baseScore: 78, goodDescriptions: [''], normalDescriptions: [''], badDescriptions: [''], details: [], advices: [] }, colors: [{ hex: '#B9C9D4', name: '清灰色', description: '' }, { hex: '#C9D4CF', name: '浅米色', description: '' }] },
+            { id: 'libra', name: '天秤座', icon: '♎', date: '9月23日 - 10月23日', fortune: { rating: '优雅', baseScore: 76, goodDescriptions: [''], normalDescriptions: [''], badDescriptions: [''], details: [], advices: [] }, colors: [{ hex: '#D4C9B9', name: '奶茶灰', description: '' }, { hex: '#B9D4D4', name: '浅蓝灰', description: '' }] },
+            { id: 'scorpio', name: '天蝎座', icon: '♏', date: '10月24日 - 11月22日', fortune: { rating: '神秘', baseScore: 79, goodDescriptions: [''], normalDescriptions: [''], badDescriptions: [''], details: [], advices: [] }, colors: [{ hex: '#B9B9D4', name: '暗紫色', description: '' }, { hex: '#C9B9D4', name: '深粉色', description: '' }] },
+            { id: 'sagittarius', name: '射手座', icon: '♐', date: '11月23日 - 12月21日', fortune: { rating: '自由', baseScore: 82, goodDescriptions: [''], normalDescriptions: [''], badDescriptions: [''], details: [], advices: [] }, colors: [{ hex: '#D4C9B9', name: '暖棕色', description: '' }, { hex: '#B9D4B9', name: '草绿色', description: '' }] },
+            { id: 'capricorn', name: '摩羯座', icon: '♑', date: '12月22日 - 1月19日', fortune: { rating: '稳重', baseScore: 71, goodDescriptions: [''], normalDescriptions: [''], badDescriptions: [''], details: [], advices: [] }, colors: [{ hex: '#B9C9C9', name: '深灰色', description: '' }, { hex: '#C9C9B9', name: '浅卡其', description: '' }] },
+            { id: 'aquarius', name: '水瓶座', icon: '♒', date: '1月20日 - 2月18日', fortune: { rating: '创意', baseScore: 83, goodDescriptions: [''], normalDescriptions: [''], badDescriptions: [''], details: [], advices: [] }, colors: [{ hex: '#B9D4C9', name: '青绿色', description: '' }, { hex: '#C9B9D4', name: '幻紫色', description: '' }] },
+            { id: 'pisces', name: '双鱼座', icon: '♓', date: '2月19日 - 3月20日', fortune: { rating: '浪漫', baseScore: 74, goodDescriptions: [''], normalDescriptions: [''], badDescriptions: [''], details: [], advices: [] }, colors: [{ hex: '#D4B9D4', name: '粉紫色', description: '' }, { hex: '#B9C9D4', name: '海蓝色', description: '' }] }
+        ];
+
+        // 全局变量
+        let currentZodiac = zodiacData[0]; // 默认白羊座
+        let currentDate = new Date();
+        let selectedDate = currentDate;
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', () => {
+            initZodiacButtons();
+            initCalendar();
+            updateFortuneDisplay();
+            updateColorDisplay();
+            
+            // 默认选中第一个星座
+            const firstBtn = document.querySelector('.zodiac-btn');
+            if (firstBtn) firstBtn.classList.add('active');
+        });
+
+        // 初始化星座按钮
+        function initZodiacButtons() {
+            const container = document.getElementById('zodiac-buttons');
+            zodiacData.forEach(zodiac => {
+                const btn = document.createElement('button');
+                btn.className = 'zodiac-btn';
+                btn.dataset.zodiacId = zodiac.id;
+                btn.innerHTML = `
+                    <span class="text-2xl mb-1">${zodiac.icon}</span>
+                    <span class="text-sm">${zodiac.name}</span>
+                `;
+                
+                // 点击切换星座
+                btn.addEventListener('click', () => {
+                    // 移除所有active状态
+                    document.querySelectorAll('.zodiac-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    // 更新当前星座
+                    currentZodiac = zodiacData.find(z => z.id === zodiac.id);
+                    
+                    // 更新显示
+                    updateFortuneDisplay();
+                    updateColorDisplay();
+                    
+                    // 显示运势区域
+                    document.getElementById('fortune-section').style.opacity = 1;
+                    document.getElementById('colors-section').style.opacity = 1;
+                });
+                
+                container.appendChild(btn);
+            });
+        }
+
+        // 初始化日历功能
+        function initCalendar() {
+            const calendarToggle = document.getElementById('calendar-toggle');
+            const calendarModal = document.getElementById('calendar-modal');
+            const closeCalendar = document.getElementById('close-calendar');
+            const confirmDate = document.getElementById('confirm-date');
+            const resetDate = document.getElementById('reset-date');
+            const datePicker = document.getElementById('date-picker');
+            
+            // 设置日期选择器默认值
+            const today = new Date();
+            datePicker.value = today.toISOString().split('T')[0];
+            
+            // 打开日历弹窗
+            calendarToggle.addEventListener('click', () => {
+                calendarModal.classList.add('active');
+            });
+            
+            // 关闭日历弹窗
+            closeCalendar.addEventListener('click', () => {
+                calendarModal.classList.remove('active');
+            });
+            
+            // 点击弹窗外层关闭
+            calendarModal.addEventListener('click', (e) => {
+                if (e.target === calendarModal) {
+                    calendarModal.classList.remove('active');
+                }
+            });
+            
+            // 重置为今日
+            resetDate.addEventListener('click', () => {
+                selectedDate = new Date();
+                datePicker.value = selectedDate.toISOString().split('T')[0];
+                updateDateDisplay();
+                updateFortuneDisplay();
+                calendarModal.classList.remove('active');
+            });
+            
+            // 确认选择日期
+            confirmDate.addEventListener('click', () => {
+                selectedDate = new Date(datePicker.value);
+                if (isNaN(selectedDate.getTime())) {
+                    selectedDate = new Date();
+                }
+                updateDateDisplay();
+                updateFortuneDisplay();
+                calendarModal.classList.remove('active');
+            });
+        }
+
+        // 更新日期显示
+        function updateDateDisplay() {
+            const dateText = document.getElementById('selected-date-text');
+            const queryDateDisplay = document.getElementById('query-date-display');
+            
+            const today = new Date();
+            const isToday = selectedDate.toDateString() === today.toDateString();
+            
+            if (isToday) {
+                dateText.textContent = '选择查询日期（当前：今日）';
+                queryDateDisplay.textContent = '推活运势（今日）';
+            } else {
+                const formattedDate = selectedDate.toLocaleDateString('zh-CN', { 
+                    year: 'numeric', month: 'long', day: 'numeric' 
+                });
+                dateText.textContent = `选择查询日期（当前：${formattedDate}）`;
+                queryDateDisplay.textContent = `推活运势（${formattedDate}）`;
+            }
+        }
+
+        // 更新运势显示
+        function updateFortuneDisplay() {
+            // 基础信息
+            document.getElementById('zodiac-icon').textContent = currentZodiac.icon;
+            document.getElementById('zodiac-name').textContent = currentZodiac.name;
+            document.getElementById('zodiac-date').textContent = currentZodiac.date;
+            document.getElementById('fortune-rating').textContent = currentZodiac.fortune.rating;
+            
+            // 计算运势分数（根据日期和基础分随机波动）
+            const randomFactor = (selectedDate.getDate() + selectedDate.getMonth()) % 15 - 7;
+            let fortuneScore = currentZodiac.fortune.baseScore + randomFactor;
+            fortuneScore = Math.max(0, Math.min(100, fortuneScore)); // 限制0-100
+            document.getElementById('fortune-score').textContent = `${fortuneScore}分`;
+            document.getElementById('fortune-meter-fill').style.width = `${fortuneScore}%`;
+            
+            // 选择运势描述
+            let description;
+            if (fortuneScore >= 80) {
+                const randomIdx = Math.floor(Math.random() * currentZodiac.fortune.goodDescriptions.length);
+                description = currentZodiac.fortune.goodDescriptions[randomIdx] || currentZodiac.fortune.goodDescriptions[0];
+            } else if (fortuneScore >= 60) {
+                const randomIdx = Math.floor(Math.random() * currentZodiac.fortune.normalDescriptions.length);
+                description = currentZodiac.fortune.normalDescriptions[randomIdx] || currentZodiac.fortune.normalDescriptions[0];
+            } else {
+                const randomIdx = Math.floor(Math.random() * currentZodiac.fortune.badDescriptions.length);
+                description = currentZodiac.fortune.badDescriptions[randomIdx] || currentZodiac.fortune.badDescriptions[0];
+            }
+            document.getElementById('fortune-description').textContent = description;
+            
+            // 生成应援详情
+            const detailsContainer = document.getElementById('fortune-details');
+            detailsContainer.innerHTML = '';
+            currentZodiac.fortune.details.forEach(detail => {
+                if (!detail.variations || detail.variations.length === 0) return;
+                
+                // 计算分项分数
+                const detailRandom = (selectedDate.getDate() + detail.baseScore) % 10 - 5;
+                const detailScore = Math.max(0, Math.min(100, detail.baseScore + detailRandom));
+                
+                // 随机选择描述
+                const randomDesc = detail.variations[Math.floor(Math.random() * detail.variations.length)];
+                
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center';
+                li.innerHTML = `
+                    <span class="text-textMain">${randomDesc}</span>
+                    <div class="flex items-center gap-2">
+                        <div class="w-24 h-2 rounded-full bg-bgLight overflow-hidden">
+                            <div class="h-full bg-primary" style="width: ${detailScore}%"></div>
+                        </div>
+                        <span class="text-xs text-textLight">${detailScore}分</span>
+                    </div>
+                `;
+                detailsContainer.appendChild(li);
+            });
+            
+            // 随机选择推活建议
+            if (currentZodiac.fortune.advices && currentZodiac.fortune.advices.length > 0) {
+                const randomAdvice = currentZodiac.fortune.advices[Math.floor(Math.random() * currentZodiac.fortune.advices.length)];
+                document.getElementById('fortune-advice').textContent = randomAdvice;
+            }
+            
+            // 显示区域
+            document.getElementById('fortune-section').style.opacity = 1;
+        }
+
+        // 更新幸运色显示
+        function updateColorDisplay() {
+            const swatchesContainer = document.getElementById('color-swatches');
+            const colorDesc = document.getElementById('color-description');
+            
+            swatchesContainer.innerHTML = '';
+            
+            // 随机选2个幸运色（莫兰迪风格）
+            const shuffledColors = [...currentZodiac.colors].sort(() => 0.5 - Math.random());
+            const selectedColors = shuffledColors.slice(0, 2);
+            
+            // 生成色卡
+            selectedColors.forEach(color => {
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = color.hex;
+                swatch.title = color.name;
+                
+                // 点击色卡显示描述
+                swatch.addEventListener('click', () => {
+                    colorDesc.textContent = `${color.name}（${color.hex}）：${color.description}`;
+                });
+                
+                swatchesContainer.appendChild(swatch);
+            });
+            
+            // 默认显示第一个色卡描述
+            if (selectedColors.length > 0) {
+                colorDesc.textContent = `${selectedColors[0].name}（${selectedColors[0].hex}）：${selectedColors[0].description}`;
+            }
+            
+            // 显示区域
+            document.getElementById('colors-section').style.opacity = 1;
+        }
+    </script>
+</body>
+</html>
